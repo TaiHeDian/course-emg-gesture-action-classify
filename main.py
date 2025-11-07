@@ -1,88 +1,46 @@
-from datetime import datetime
-
-import matplotlib.pyplot as plt
-import numpy as np
 import torch
-from sklearn.metrics import confusion_matrix
-
-from train import train_model
-
-# 获取训练结果
-train_losses, test_losses, train_accuracies, test_accuracies, model, test_loader, device = train_model()
-
-timestamp = datetime.now().strftime('%Y%m%d_%H%M')
-
-# 保存训练结果
-results = np.array([train_losses, test_losses, train_accuracies, test_accuracies]).T
-np.savetxt(f'out/results_{timestamp}.csv', results, delimiter=',', header='Train Loss,Test Loss,Train Accuracy,Test Accuracy', comments='')
+from data_preprocessing import prepare_data
+from model              import CNN1D
+from train_eval         import train_and_evaluate
+from visualize          import plot_metrics, plot_confusion
 
 
-## 绘制 loss 和 accuracy 曲线
-plt.figure(figsize=(12, 5))
-plt.subplot(1, 2, 1)
-plt.plot(train_losses, label='Train Loss')
-plt.plot(test_losses, label='Test Loss')
-plt.xlabel('Epoch')
-plt.ylabel('Loss')
-plt.legend()
-plt.title('Loss Curve')
+# --------- 用户配置 ---------
+data_files = {
+    "class_1": r"data\1.txt",
+    "class_2": r"data\2.txt",
+    "class_3": r"data\3.txt",
+    "class_4": r"data\4.txt",
+    "class_5": r"data\5.txt",
+}
+signal_length = 2500
+test_size     = 0.2
+random_state  = 42
+batch_size    = 32
+num_epochs    = 200
+learning_rate = 1e-4
+# ----------------------------
 
-plt.subplot(1, 2, 2)
-plt.plot(train_accuracies, label='Train Accuracy')
-plt.plot(test_accuracies, label='Test Accuracy')
-plt.xlabel('Epoch')
-plt.ylabel('Accuracy')
-plt.legend()
-plt.title('Accuracy Curve')
+# 1. 数据预处理
+train_loader, test_loader, encoder, n_classes = prepare_data(
+    data_files, signal_length,
+    test_size=test_size,
+    random_state=random_state,
+    batch_size=batch_size
+)
 
-plt.savefig(f'out/loss_accuracy_curve_{timestamp}.png')
-plt.show()
+# 2. 构建模型
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+model  = CNN1D(signal_length=signal_length, n_classes=n_classes)
 
+# 3. 训练与评估
+train_losses, test_accuracies, all_preds, all_labels = train_and_evaluate(
+    model, train_loader, test_loader,
+    device,
+    num_epochs=num_epochs,
+    lr=learning_rate
+)
 
-## 绘制混淆矩阵
-model.eval()
-y_pred = []
-y_true = []
-
-with torch.no_grad():
-    for inputs, labels in test_loader:
-        inputs, labels = inputs.to(device), labels.to(device)
-        outputs = model(inputs)
-        _, predicted = torch.max(outputs.data, 1)
-        y_pred.extend(predicted.cpu().numpy())
-        y_true.extend(labels.cpu().numpy())
-
-cm = confusion_matrix(y_true, y_pred)
-
-labels = ['Go', 'Be', 'No', 'Here', 'Hello', 'Thanks', 'Come', 'Eat', 'Walk']
-cm_percentage = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis] * 100
-
-fig, ax = plt.subplots(figsize=(10, 10))  # Increase the figure size
-cax = ax.matshow(cm_percentage, cmap="Blues")
-fig.colorbar(cax, fraction=0.046, pad=0.04)  # Adjust colorbar length
-ticks = np.arange(len(labels))
-plt.xticks(ticks, labels, rotation=45, fontsize=12, fontname='Arial')
-plt.yticks(ticks, labels, fontsize=12, fontname='Arial')
-ax.xaxis.set_ticks_position('bottom')  # Move x-axis labels to the bottom
-plt.xlabel('Predicted Label', fontsize=14, fontname='Arial')
-plt.ylabel('True Label', fontsize=14, fontname='Arial')
-
-# Add percentage sign to the text in the confusion matrix
-thresh = cm_percentage.max() / 2  # Threshold for text color
-for i in range(len(labels)):
-    for j in range(len(labels)):
-        plt.annotate(
-            f'{cm_percentage[i, j]:.1f}%',
-            (j, i),
-            ha='center',
-            va='center',
-            color='white' if cm_percentage[i, j] > thresh else 'black',
-            fontsize=12,
-            fontname='Arial'
-        )
-
-overall_accuracy = np.sum(np.diag(cm)) / np.sum(cm) * 100
-plt.title(f'Overall Accuracy: {overall_accuracy:.1f}%', color='blue', weight='bold', fontsize=16, fontname='Arial')
-plt.tight_layout()
-plt.savefig(f'out/confusion_matrix_{timestamp}.png')
-plt.show()
+# 4. 可视化
+plot_metrics(train_losses, test_accuracies)
+plot_confusion(all_labels, all_preds, encoder.categories_[0])
