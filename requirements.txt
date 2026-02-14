@@ -1,4 +1,6 @@
-numpy
-torch
-matplotlib
-scikit-learn
+torch 
+numpy 
+scikit-learn 
+matplotlib 
+seaborn 
+optuna
