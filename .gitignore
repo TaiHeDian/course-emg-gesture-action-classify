@@ -92,9 +92,17 @@ cython_debug/
 .idea/
 out/
 *.iml
+outputs/
 
 # LSP config files
 pyrightconfig.json
 
 # VS Code
 .vscode/
+
+# PyTorch
+*.pt
+*.pth
+*.ptl
+*.ckpt
+*.pth.tar
